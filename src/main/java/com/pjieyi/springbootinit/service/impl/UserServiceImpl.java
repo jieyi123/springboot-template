@@ -3,22 +3,17 @@ package com.pjieyi.springbootinit.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.pjieyi.springbootinit.constant.CommonConstant;
-import com.pjieyi.springbootinit.constant.UserConstant;
-import com.pjieyi.springbootinit.exception.BusinessException;
-import com.pjieyi.springbootinit.model.vo.LoginUserVO;
-import com.pjieyi.springbootinit.model.vo.UserVO;
-import com.pjieyi.springbootinit.service.UserService;
 import com.pjieyi.springbootinit.common.ErrorCode;
+import com.pjieyi.springbootinit.constant.CommonConstant;
+import com.pjieyi.springbootinit.exception.BusinessException;
 import com.pjieyi.springbootinit.mapper.UserMapper;
 import com.pjieyi.springbootinit.model.dto.user.UserQueryRequest;
 import com.pjieyi.springbootinit.model.entity.User;
 import com.pjieyi.springbootinit.model.enums.UserRoleEnum;
+import com.pjieyi.springbootinit.model.vo.LoginUserVO;
+import com.pjieyi.springbootinit.model.vo.UserVO;
+import com.pjieyi.springbootinit.service.UserService;
 import com.pjieyi.springbootinit.utils.SqlUtils;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
-import javax.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import me.chanjar.weixin.common.bean.WxOAuth2UserInfo;
 import org.apache.commons.lang3.StringUtils;
@@ -26,9 +21,18 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import static com.pjieyi.springbootinit.constant.RedisKeyConstant.SPRING_SESSION_PREFIX;
+import static com.pjieyi.springbootinit.constant.UserConstant.USER_LOGIN_STATE;
+
 /**
  * 用户服务实现
- *
  */
 @Service
 @Slf4j
@@ -38,6 +42,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * 盐值，混淆密码
      */
     public static final String SALT = "pjieyi";
+
+    // @Resource
+    // private RedisTemplate<String, Object> redisTemplate;
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
@@ -101,8 +108,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             log.info("user login failed, userAccount cannot match userPassword");
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
         }
+        String userId = String.valueOf(user.getId());
         // 3. 记录用户的登录态
-        request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, user);
+        // String sessionId = request.getSession().getId();
+        // if (Boolean.TRUE.equals(redisTemplate.hasKey(userId))) {
+        //     //存在说明已经有其他设备登录，删除其他设备的登录信息
+        //     redisTemplate.delete(SPRING_SESSION_PREFIX + redisTemplate.opsForValue().get(userId));
+        // }
+        request.getSession().setAttribute(USER_LOGIN_STATE, user);
+        // redisTemplate.opsForValue().set(userId, sessionId, 30, TimeUnit.DAYS);
         return this.getLoginUserVO(user);
     }
 
@@ -133,7 +147,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 }
             }
             // 记录用户的登录态
-            request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, user);
+            request.getSession().setAttribute(USER_LOGIN_STATE, user);
             return getLoginUserVO(user);
         }
     }
@@ -147,7 +161,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public User getLoginUser(HttpServletRequest request) {
         // 先判断是否已登录
-        Object userObj = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
         User currentUser = (User) userObj;
         if (currentUser == null || currentUser.getId() == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
@@ -170,7 +184,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public User getLoginUserPermitNull(HttpServletRequest request) {
         // 先判断是否已登录
-        Object userObj = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
         User currentUser = (User) userObj;
         if (currentUser == null || currentUser.getId() == null) {
             return null;
@@ -189,7 +203,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public boolean isAdmin(HttpServletRequest request) {
         // 仅管理员可查询
-        Object userObj = request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE);
+        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
         User user = (User) userObj;
         return isAdmin(user);
     }
@@ -206,11 +220,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public boolean userLogout(HttpServletRequest request) {
-        if (request.getSession().getAttribute(UserConstant.USER_LOGIN_STATE) == null) {
+        if (request.getSession().getAttribute(USER_LOGIN_STATE) == null) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "未登录");
         }
+        User loginUser = this.getLoginUser(request);
+        String userId = String.valueOf(loginUser.getId());
         // 移除登录态
-        request.getSession().removeAttribute(UserConstant.USER_LOGIN_STATE);
+        // redisTemplate.delete(userId);
+        request.getSession().removeAttribute(USER_LOGIN_STATE);
         return true;
     }
 
