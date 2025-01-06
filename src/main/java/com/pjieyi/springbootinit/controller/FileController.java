@@ -7,6 +7,7 @@ import com.pjieyi.springbootinit.common.BaseResponse;
 import com.pjieyi.springbootinit.common.ErrorCode;
 import com.pjieyi.springbootinit.common.ResultUtils;
 import com.pjieyi.springbootinit.manager.CosManager;
+import com.pjieyi.springbootinit.manager.OssManager;
 import com.pjieyi.springbootinit.model.dto.file.UploadFileRequest;
 import com.pjieyi.springbootinit.model.entity.User;
 import com.pjieyi.springbootinit.model.enums.FileUploadBizEnum;
@@ -39,8 +40,11 @@ public class FileController {
     @Resource
     private CosManager cosManager;
 
+    @Resource
+    private OssManager ossManager;
+
     /**
-     * 文件上传
+     * 文件上传 (腾讯云COS)
      *
      * @param multipartFile
      * @param uploadFileRequest
@@ -48,7 +52,7 @@ public class FileController {
      * @return
      */
     @PostMapping("/upload")
-    public BaseResponse<String> uploadFile(@RequestPart("file") MultipartFile multipartFile,
+    public BaseResponse<String> uploadFileToCOS(@RequestPart("file") MultipartFile multipartFile,
             UploadFileRequest uploadFileRequest, HttpServletRequest request) {
         String biz = uploadFileRequest.getBiz();
         FileUploadBizEnum fileUploadBizEnum = FileUploadBizEnum.getEnumByValue(biz);
@@ -80,6 +84,39 @@ public class FileController {
                     log.error("file delete error, filepath = {}", filepath);
                 }
             }
+        }
+    }
+
+    /**
+     * 文件上传 (阿里云OSS)
+     *
+     * @param multipartFile
+     * @param uploadFileRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/uploadoss")
+    public BaseResponse<String> uploadFileToOSS(@RequestPart("file") MultipartFile multipartFile,
+                                                UploadFileRequest uploadFileRequest, HttpServletRequest request) {
+        String biz = uploadFileRequest.getBiz();
+        FileUploadBizEnum fileUploadBizEnum = FileUploadBizEnum.getEnumByValue(biz);
+        if (fileUploadBizEnum == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        validFile(multipartFile, fileUploadBizEnum);
+        User loginUser = userService.getLoginUser(request);
+        // 文件目录：根据业务、用户来划分
+        String uuid = RandomStringUtils.randomAlphanumeric(8);
+        String filename = uuid + "-" + multipartFile.getOriginalFilename();
+        String filepath = String.format("%s/%s/%s", fileUploadBizEnum.getValue(), loginUser.getId(), filename);
+        try {
+            // 上传文件
+            ossManager.putObject(filepath, multipartFile.getInputStream());
+            // 返回可访问地址
+            return ResultUtils.success(FileConstant.OSS_HOST + "/"+filepath);
+        } catch (Exception e) {
+            log.error("file upload error, filepath = " + filepath, e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "上传失败");
         }
     }
 

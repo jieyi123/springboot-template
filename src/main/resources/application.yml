@@ -82,11 +82,19 @@ wx:
     appSecret: xxx
 # 对象存储
 # todo 需替换配置
+# 腾讯云对象存储
 cos:
   client:
     accessKey: xxx
     secretKey: xxx
     region: xxx
+    bucket: xxx
+# 阿里云对象存储
+oss:
+  client:
+    accessKeySecret: xxx
+    accessKeyId: xxx
+    endpoint: xxx
     bucket: xxx
 # 接口文档配置
 knife4j:
